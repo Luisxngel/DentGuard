@@ -3,6 +3,7 @@ import os
 import time
 from src.auth.login import login_user
 from src.utils.ai_core import test_connection, consultar_ia
+from src.utils.pdf_gen import generar_receta_pdf
 from src.data.database import init_db, add_paciente, get_pacientes, add_imagen, get_imagenes
 
 # Configuración de la página
@@ -14,6 +15,10 @@ st.set_page_config(
 
 # Inicializar Base de Datos
 init_db()
+
+# Asegurar directorios de assets
+if not os.path.exists("assets/uploads"):
+    os.makedirs("assets/uploads")
 
 # Inicializar estado de sesión
 if "logged_in" not in st.session_state:
@@ -52,7 +57,7 @@ def show_login_screen():
 
 def render_patient_management():
     st.subheader("Gestión Clínica")
-    tab1, tab2, tab3 = st.tabs(["Registrar Paciente", "Ver Pacientes", "Imágenes / Rayos X"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Registrar Paciente", "Ver Pacientes", "Imágenes / Rayos X", "Generar Receta"])
     
     with tab1:
         with st.form("new_patient"):
@@ -113,7 +118,9 @@ def render_patient_management():
                             f.write(uploaded_file.getbuffer())
                         
                         # Registrar en DB
-                        add_imagen(selected_id, file_path, tipo_imagen)
+                        # FIX: Normalizar ruta para evitar errores en Windows (Backslashes)
+                        ruta_normalizada = file_path.replace("\\", "/")
+                        add_imagen(selected_id, ruta_normalizada, tipo_imagen)
                         st.success("Imagen guardada correctamente.")
                         st.rerun()
 
@@ -126,7 +133,49 @@ def render_patient_management():
                 else:
                     # Mostrar grid de imágenes
                     for _, img in df_imgs.iterrows():
-                        st.image(img['ruta_archivo'], caption=f"{img['tipo']} - {img['fecha']}", width=300)
+                        ruta = img['ruta_archivo']
+                        if os.path.exists(ruta):
+                            st.image(ruta, caption=f"{img['tipo']} - {img['fecha']}", width=300)
+                        else:
+                            st.warning(f"Imagen no encontrada: {ruta}")
+
+    with tab4:
+        st.subheader("Generar Receta Médica")
+        df_pacientes = get_pacientes()
+        
+        if df_pacientes.empty:
+            st.warning("No hay pacientes registrados.")
+        else:
+            # Selector de paciente (Reutilizado)
+            paciente_opciones = df_pacientes.set_index('id')['nombre'].to_dict()
+            selected_id_rx = st.selectbox("Paciente", options=paciente_opciones.keys(), format_func=lambda x: paciente_opciones[x], key="rx_patient")
+            paciente_nombre = paciente_opciones[selected_id_rx]
+            
+            with st.form("receta_form"):
+                diagnostico = st.text_input("Diagnóstico")
+                medicamentos = st.text_area("Medicamentos e Indicaciones", height=150)
+                submitted_rx = st.form_submit_button("Generar PDF")
+                
+                if submitted_rx:
+                    if not diagnostico or not medicamentos:
+                        st.error("Por favor complete todos los campos.")
+                    else:
+                        # Generar PDF
+                        pdf_buffer = generar_receta_pdf(
+                            doctor_nombre=st.session_state.user['name'],
+                            paciente_nombre=paciente_nombre,
+                            fecha=time.strftime("%d/%m/%Y"),
+                            diagnostico=diagnostico,
+                            medicamentos=medicamentos
+                        )
+                        
+                        st.success("Receta generada exitosamente.")
+                        st.download_button(
+                            label="📥 Descargar Receta PDF",
+                            data=pdf_buffer,
+                            file_name=f"Receta_{paciente_nombre.replace(' ', '_')}.pdf",
+                            mime="application/pdf"
+                        )
 
 def show_dashboard():
     # Sidebar dinámico según rol
