@@ -1,10 +1,11 @@
 import streamlit as st
 import os
 import time
+from datetime import datetime
 from src.auth.login import login_user
 from src.utils.ai_core import test_connection, consultar_ia
 from src.utils.pdf_gen import generar_receta_pdf
-from src.data.database import init_db, add_paciente, get_pacientes, add_imagen, get_imagenes
+from src.data.database import init_db, add_paciente, get_pacientes, add_imagen, get_imagenes, add_transaccion, get_finanzas, get_deudas_pendientes, saldar_deuda
 
 # Configuración de la página
 st.set_page_config(
@@ -202,7 +203,7 @@ def show_dashboard():
         
         if st.session_state.role == "admin":
             # God Mode: Admin sees everything
-            view_mode = st.radio("Ir a:", ["Admin Panel", "Clínica", "Configuración"])
+            view_mode = st.radio("Ir a:", ["Admin Panel", "Finanzas", "Clínica", "Configuración"])
         elif st.session_state.role == "doctor":
             view_mode = st.radio("Ir a:", ["Clínica", "Perfil"])
         else:
@@ -217,6 +218,122 @@ def show_dashboard():
         st.metric("Total Pacientes", len(get_pacientes()))
         # More admin widgets here...
         
+    elif view_mode == "Finanzas":
+        st.subheader("Módulo Financiero")
+        
+        # --- KPIs ---
+        df_finanzas = get_finanzas()
+        
+        # Calcular métricas
+        total_ingresos = 0
+        total_gastos = 0
+        total_por_cobrar = 0
+        
+        if not df_finanzas.empty:
+            # Ingresos Pagados
+            ingresos_df = df_finanzas[(df_finanzas['tipo'] == 'Ingreso') & (df_finanzas['estado'] == 'Pagado')]
+            total_ingresos = ingresos_df['monto'].sum()
+            
+            # Gastos (siempre pagados en este modelo simple)
+            gastos_df = df_finanzas[df_finanzas['tipo'] == 'Gasto']
+            total_gastos = gastos_df['monto'].sum()
+            
+            # Por Cobrar (Ingresos Pendientes)
+            pendientes_df = df_finanzas[(df_finanzas['tipo'] == 'Ingreso') & (df_finanzas['estado'] == 'Pendiente')]
+            total_por_cobrar = pendientes_df['monto'].sum()
+            
+        caja_real = total_ingresos - total_gastos
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Caja Real", f"S/. {caja_real:,.2f}")
+        col2.metric("Por Cobrar (Deuda)", f"S/. {total_por_cobrar:,.2f}", delta_color="inverse")
+        col3.metric("Gastos Operativos", f"S/. {total_gastos:,.2f}", delta_color="inverse")
+        
+        st.markdown("---")
+        
+        # --- Pestañas ---
+        tab_reg, tab_cob, tab_hist = st.tabs(["📝 Registrar", "🔔 Cuentas por Cobrar", "📊 Historial Completo"])
+        
+        # TAB 1: Registrar
+        with tab_reg:
+            st.markdown("#### Registrar Movimiento")
+            with st.form("finance_form"):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    tipo_mov = st.selectbox("Tipo", ["Ingreso", "Gasto"])
+                    monto = st.number_input("Monto", min_value=0.0, step=10.0)
+                with col_b:
+                    concepto = st.text_input("Concepto")
+                    fecha_mov = st.date_input("Fecha", value=datetime.now())
+                
+                # Lógica condicional simulada
+                es_credito = st.checkbox("¿Es Crédito / Deuda?")
+                
+                # Selector de paciente
+                df_p = get_pacientes()
+                paciente_id = None
+                if not df_p.empty:
+                    opciones = {p['id']: p['nombre'] for _, p in df_p.iterrows()}
+                    opciones[0] = "Ninguno / General" 
+                    pid_sel = st.selectbox("Paciente Asociado", options=list(opciones.keys()), format_func=lambda x: opciones[x])
+                    if pid_sel != 0:
+                        paciente_id = pid_sel
+                
+                submitted_fin = st.form_submit_button("Registrar Transacción")
+                
+                if submitted_fin:
+                    estado = "Pagado"
+                    if tipo_mov == "Ingreso" and es_credito:
+                        estado = "Pendiente"
+                        if paciente_id is None:
+                            st.error("Debe asociar un paciente para registrar una deuda.")
+                            st.stop()
+                    
+                    add_transaccion(tipo_mov, monto, concepto, fecha_mov, paciente_id, estado)
+                    st.success("Movimiento registrado.")
+                    st.rerun()
+
+        # TAB 2: Cobranza
+        with tab_cob:
+            st.markdown("#### Gestión de Cobranza")
+            df_deudas = get_deudas_pendientes()
+            
+            if df_deudas.empty:
+                st.balloons()
+                st.success("¡Excelente! No hay deudas pendientes.")
+            else:
+                for index, row in df_deudas.iterrows():
+                    c1, c2, c3, c4 = st.columns([2, 3, 2, 2])
+                    c1.write(row['fecha'])
+                    c2.write(f"{row['paciente_nombre']} - {row['concepto']}")
+                    c3.write(f"**S/. {row['monto']:,.2f}**")
+                    if c4.button(f"Saldar", key=f"pay_{row['id']}"):
+                        saldar_deuda(row['id'])
+                        st.success(f"Deuda de {row['paciente_nombre']} saldada.")
+                        st.rerun()
+
+        # TAB 3: Historial
+        with tab_hist:
+            st.markdown("#### Historial de Transacciones")
+            if df_finanzas.empty:
+                st.info("No hay transacciones registradas.")
+            else:
+                # Ordenar por fecha descendente
+                df_display = df_finanzas.sort_values(by='fecha', ascending=False)
+                
+                # Formatear columnas para visualización
+                st.dataframe(
+                    df_display[['fecha', 'tipo', 'concepto', 'monto', 'estado']],
+                    column_config={
+                        "monto": st.column_config.NumberColumn(
+                            "Monto",
+                            format="S/. %.2f"
+                        )
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
+
     elif view_mode == "Clínica":
         render_patient_management()
         

@@ -46,6 +46,20 @@ def init_db():
         )
     ''')
     
+    # Tabla Finanzas
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS finanzas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT,
+            monto REAL,
+            concepto TEXT,
+            fecha DATE,
+            paciente_id INTEGER,
+            estado TEXT,
+            FOREIGN KEY (paciente_id) REFERENCES pacientes (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -99,3 +113,39 @@ def get_imagenes(paciente_id):
     df = pd.read_sql_query("SELECT * FROM imagenes WHERE paciente_id = ?", conn, params=(paciente_id,))
     conn.close()
     return df
+
+# --- CRUD Finanzas ---
+
+def add_transaccion(tipo, monto, concepto, fecha, paciente_id, estado):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO finanzas (tipo, monto, concepto, fecha, paciente_id, estado) VALUES (?, ?, ?, ?, ?, ?)",
+              (tipo, monto, concepto, fecha, paciente_id, estado))
+    conn.commit()
+    conn.close()
+
+def get_finanzas():
+    conn = get_connection()
+    df = pd.read_sql_query("SELECT * FROM finanzas", conn)
+    conn.close()
+    return df
+
+def get_deudas_pendientes():
+    conn = get_connection()
+    # Join para obtener nombre del paciente
+    query = """
+        SELECT f.*, p.nombre as paciente_nombre 
+        FROM finanzas f 
+        LEFT JOIN pacientes p ON f.paciente_id = p.id 
+        WHERE f.estado = 'Pendiente'
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
+
+def saldar_deuda(transaccion_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE finanzas SET estado = 'Pagado' WHERE id = ?", (transaccion_id,))
+    conn.commit()
+    conn.close()
