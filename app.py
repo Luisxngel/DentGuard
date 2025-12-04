@@ -5,6 +5,7 @@ from datetime import datetime
 from src.auth.login import login_user
 from src.utils.ai_core import test_connection, consultar_ia
 from src.utils.pdf_gen import generar_receta_pdf
+from src.utils.config_manager import load_settings, save_settings
 from src.data.database import init_db, add_paciente, get_pacientes, add_imagen, get_imagenes, add_transaccion, get_finanzas, get_deudas_pendientes, saldar_deuda
 
 # Configuración de la página
@@ -299,7 +300,6 @@ def show_dashboard():
             df_deudas = get_deudas_pendientes()
             
             if df_deudas.empty:
-                st.balloons()
                 st.success("¡Excelente! No hay deudas pendientes.")
             else:
                 for index, row in df_deudas.iterrows():
@@ -338,7 +338,46 @@ def show_dashboard():
         render_patient_management()
         
     elif view_mode == "Configuración":
-        st.warning("Configuración del Sistema (Solo Admin)")
+        st.subheader("Configuración del Sistema")
+        
+        # Cargar configuración actual
+        settings = load_settings()
+        
+        with st.form("config_form"):
+            st.markdown("#### Datos de la Empresa")
+            nombre = st.text_input("Nombre de la Clínica", value=settings.get("nombre_clinica", ""))
+            slogan = st.text_input("Slogan / Subtítulo", value=settings.get("slogan", ""))
+            direccion = st.text_input("Dirección", value=settings.get("direccion", ""))
+            telefono = st.text_input("Teléfono / RUC", value=settings.get("telefono", ""))
+            mensaje_pie = st.text_input("Mensaje Pie de Página (Recetas)", value=settings.get("mensaje_pie", ""))
+            
+            if st.form_submit_button("Guardar Configuración"):
+                new_settings = {
+                    "nombre_clinica": nombre,
+                    "slogan": slogan,
+                    "direccion": direccion,
+                    "telefono": telefono,
+                    "mensaje_pie": mensaje_pie
+                }
+                save_settings(new_settings)
+                st.success("Configuración guardada correctamente.")
+                st.rerun()
+        
+        st.markdown("---")
+        st.markdown("#### Seguridad de Datos")
+        st.write("Descargue una copia de seguridad de la base de datos.")
+        
+        db_path = "dental_guard.db"
+        if os.path.exists(db_path):
+            with open(db_path, "rb") as f:
+                st.download_button(
+                    label="📥 Descargar Backup (Base de Datos)",
+                    data=f,
+                    file_name="backup_dental_guard.db",
+                    mime="application/x-sqlite3"
+                )
+        else:
+            st.warning("No se encontró la base de datos para descargar.")
         
     elif view_mode == "Perfil":
         st.info(f"Perfil de {st.session_state.user['name']}")

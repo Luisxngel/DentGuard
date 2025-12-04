@@ -1,6 +1,7 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from src.utils.config_manager import load_settings
 import io
 import os
 
@@ -12,6 +13,9 @@ def generar_receta_pdf(doctor_nombre, paciente_nombre, fecha, diagnostico, medic
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
+    
+    # Cargar configuración
+    settings = load_settings()
 
     # --- Cabecera ---
     # Logo
@@ -26,10 +30,11 @@ def generar_receta_pdf(doctor_nombre, paciente_nombre, fecha, diagnostico, medic
 
     # Info Clínica
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(170, height - 60, "DentalGuard Clinic")
+    c.drawString(170, height - 60, settings.get("nombre_clinica", "DentalGuard Clinic"))
     c.setFont("Helvetica", 10)
-    c.drawString(170, height - 75, "Especialistas en Sonrisas")
-    c.drawString(170, height - 87, "Av. Salud 123, Ciudad Médica")
+    c.drawString(170, height - 75, settings.get("slogan", "Especialistas en Sonrisas"))
+    c.drawString(170, height - 87, settings.get("direccion", "Av. Salud 123"))
+    c.drawString(170, height - 99, f"Tel: {settings.get('telefono', '')}")
     
     c.line(50, height - 110, width - 50, height - 110)
 
