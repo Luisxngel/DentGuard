@@ -154,28 +154,28 @@ def render_patient_management():
             with st.form("receta_form"):
                 diagnostico = st.text_input("Diagnóstico")
                 medicamentos = st.text_area("Medicamentos e Indicaciones", height=150)
-                submitted_rx = st.form_submit_button("Generar PDF")
+                submitted_rx = st.form_submit_button("Preparar Receta")
                 
-                if submitted_rx:
-                    if not diagnostico or not medicamentos:
-                        st.error("Por favor complete todos los campos.")
-                    else:
-                        # Generar PDF
-                        pdf_buffer = generar_receta_pdf(
-                            doctor_nombre=st.session_state.user['name'],
-                            paciente_nombre=paciente_nombre,
-                            fecha=time.strftime("%d/%m/%Y"),
-                            diagnostico=diagnostico,
-                            medicamentos=medicamentos
-                        )
-                        
-                        st.success("Receta generada exitosamente.")
-                        st.download_button(
-                            label="📥 Descargar Receta PDF",
-                            data=pdf_buffer,
-                            file_name=f"Receta_{paciente_nombre.replace(' ', '_')}.pdf",
-                            mime="application/pdf"
-                        )
+            if submitted_rx:
+                if not diagnostico or not medicamentos:
+                    st.error("Por favor complete todos los campos.")
+                else:
+                    # Generar PDF
+                    pdf_buffer = generar_receta_pdf(
+                        doctor_nombre=st.session_state.user['name'],
+                        paciente_nombre=paciente_nombre,
+                        fecha=time.strftime("%d/%m/%Y"),
+                        diagnostico=diagnostico,
+                        medicamentos=medicamentos
+                    )
+                    
+                    st.success("Receta generada exitosamente.")
+                    st.download_button(
+                        label="📥 Descargar Receta PDF",
+                        data=pdf_buffer,
+                        file_name=f"Receta_{paciente_nombre.replace(' ', '_')}.pdf",
+                        mime="application/pdf"
+                    )
 
 def show_dashboard():
     # Sidebar dinámico según rol
