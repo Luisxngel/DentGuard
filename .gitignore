@@ -16,6 +16,24 @@ venv/
 # --- PyInstaller (Basura de compilación) ---
 build/
 dist/
+# --- SEGURIDAD (IMPORTANTE) ---
+.streamlit/secrets.toml
+.env
+api_keys.txt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# --- Streamlit ---
+.streamlit/
+!.streamlit/config.toml  # Excepción: SÍ queremos subir la config de colores
+
+# --- PyInstaller (Basura de compilación) ---
+build/
+dist/
 *.spec
 
 # --- Base de Datos (Opcional: Si quieres que cada usuario empiece de cero) ---
@@ -24,3 +42,7 @@ dist/
 
 # --- VS Code / Antigravity ---
 .vscode/
+
+# --- Assets ---
+assets/uploads/*
+!assets/uploads/.gitkeep

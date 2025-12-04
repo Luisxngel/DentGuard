@@ -1,8 +1,9 @@
 import streamlit as st
 import os
+import time
 from src.auth.login import login_user
 from src.utils.ai_core import test_connection, consultar_ia
-from src.data.database import init_db, add_paciente, get_pacientes
+from src.data.database import init_db, add_paciente, get_pacientes, add_imagen, get_imagenes
 
 # Configuración de la página
 st.set_page_config(
@@ -51,7 +52,7 @@ def show_login_screen():
 
 def render_patient_management():
     st.subheader("Gestión Clínica")
-    tab1, tab2 = st.tabs(["Registrar Paciente", "Ver Pacientes"])
+    tab1, tab2, tab3 = st.tabs(["Registrar Paciente", "Ver Pacientes", "Imágenes / Rayos X"])
     
     with tab1:
         with st.form("new_patient"):
@@ -76,6 +77,56 @@ def render_patient_management():
             if st.button("Consultar"):
                 respuesta = consultar_ia(pregunta)
                 st.info(respuesta)
+
+    with tab3:
+        st.subheader("Galería de Imágenes")
+        df_pacientes = get_pacientes()
+        
+        if df_pacientes.empty:
+            st.warning("No hay pacientes registrados.")
+        else:
+            # Selector de paciente
+            paciente_opciones = df_pacientes.set_index('id')['nombre'].to_dict()
+            selected_id = st.selectbox("Seleccionar Paciente", options=paciente_opciones.keys(), format_func=lambda x: paciente_opciones[x])
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### Subir Nueva Imagen")
+                uploaded_file = st.file_uploader("Cargar Rayos X / Foto", type=['png', 'jpg', 'jpeg'])
+                tipo_imagen = st.selectbox("Tipo de Imagen", ["Rayos X", "Foto Intraoral", "Documento", "Otro"])
+                
+                if uploaded_file is not None:
+                    if st.button("Guardar Imagen"):
+                        # Crear directorio si no existe (redundancia segura)
+                        save_dir = "assets/uploads"
+                        if not os.path.exists(save_dir):
+                            os.makedirs(save_dir)
+                        
+                        # Generar nombre único
+                        file_ext = uploaded_file.name.split('.')[-1]
+                        filename = f"{selected_id}_{int(time.time())}.{file_ext}"
+                        file_path = os.path.join(save_dir, filename)
+                        
+                        # Guardar archivo
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        
+                        # Registrar en DB
+                        add_imagen(selected_id, file_path, tipo_imagen)
+                        st.success("Imagen guardada correctamente.")
+                        st.rerun()
+
+            with col2:
+                st.markdown("#### Galería del Paciente")
+                df_imgs = get_imagenes(selected_id)
+                
+                if df_imgs.empty:
+                    st.info("No hay imágenes registradas para este paciente.")
+                else:
+                    # Mostrar grid de imágenes
+                    for _, img in df_imgs.iterrows():
+                        st.image(img['ruta_archivo'], caption=f"{img['tipo']} - {img['fecha']}", width=300)
 
 def show_dashboard():
     # Sidebar dinámico según rol

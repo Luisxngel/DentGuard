@@ -34,6 +34,18 @@ def init_db():
         )
     ''')
     
+    # Tabla Imagenes
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS imagenes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paciente_id INTEGER,
+            ruta_archivo TEXT,
+            fecha TEXT,
+            tipo TEXT,
+            FOREIGN KEY (paciente_id) REFERENCES pacientes (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -67,5 +79,23 @@ def add_cita(paciente_id, fecha, motivo):
 def get_citas():
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM citas", conn)
+    conn.close()
+    return df
+
+# --- CRUD Imagenes ---
+
+def add_imagen(paciente_id, ruta_archivo, tipo):
+    conn = get_connection()
+    c = conn.cursor()
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("INSERT INTO imagenes (paciente_id, ruta_archivo, fecha, tipo) VALUES (?, ?, ?, ?)",
+              (paciente_id, ruta_archivo, fecha, tipo))
+    conn.commit()
+    conn.close()
+
+def get_imagenes(paciente_id):
+    conn = get_connection()
+    # Usamos parámetros para evitar SQL Injection, pero pandas read_sql_query con params es lo ideal
+    df = pd.read_sql_query("SELECT * FROM imagenes WHERE paciente_id = ?", conn, params=(paciente_id,))
     conn.close()
     return df
